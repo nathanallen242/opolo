@@ -1,7 +1,7 @@
 """LLM operations for question answering and retrieval."""
 import logging
 from typing import List
-from langchain_openai import OpenAI
+from langchain_ollama.chat_models import ChatOllama
 from langchain.output_parsers import CommaSeparatedListOutputParser
 from langchain.prompts import PromptTemplate
 from langchain.retrievers import MultiQueryRetriever
@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 class LLM:
     """Handles LLM operations with MultiQueryRetrieval capability."""
     
-    def __init__(self, model_name: str = "gpt-4-0125-preview"):
+    def __init__(self, model_name: str = "llama2"):
         """
         Initialize LLM with the specified model.
         
         Args:
-            model_name: Name of the OpenAI model to use.
+            model_name: Name of the Llama model to use.
         """
-        self._llm = OpenAI(model_name=model_name)
+        self._llm = ChatOllama(model_name=model_name)
         self._query_prompt = PromptTemplate(
             input_variables=["question"],
             template="""You are an AI language model tasked with generating multiple search queries 

@@ -1,7 +1,8 @@
 """Database operations for document storage and retrieval."""
 import logging
 from typing import List, Optional, Dict
-from langchain_openai import OpenAIEmbeddings
+
+from langchain_ollama import OllamaEmbeddings
 from langchain.schema.vectorstore import VectorStore
 from langchain_chroma import Chroma
 
@@ -14,24 +15,21 @@ class DocumentStore:
         self,
         persist_directory: str = "./chroma_db",
         collection_name: str = "ethics_docs",
-        model: str = "text-embedding-3-small",
-        dimensions: int = 1536
+        model: str = "llama2"
     ):
         """
-        Initialize ChromaDB client and collection with LangChain embeddings.
+        Initialize ChromaDB client and collection with Ollama embeddings (Llama 2).
         
         Args:
-            persist_directory: Directory to persist the database
-            collection_name: Name of the collection to store documents
-            model: OpenAI embedding model to use
-            dimensions: Dimension of the embedding vectors
+            persist_directory: Directory to persist the database.
+            collection_name: Name of the collection to store documents.
+            model: Ollama Embeddings model to use (default is "llama2").
         """
-        self._embedding_function = OpenAIEmbeddings(
-            model=model,
-            dimensions=dimensions
-        )
+        self._embedding_function = OllamaEmbeddings(model=model)
         self._collection_name = collection_name
         self._persist_directory = persist_directory
+        
+        # Chroma vector store using Ollama embeddings
         self._vectorstore = Chroma(
             collection_name=collection_name,
             embedding_function=self._embedding_function,
@@ -43,14 +41,14 @@ class DocumentStore:
         Add documents to the collection.
         
         Args:
-            documents: List of document dictionaries with 'content' and 'metadata' keys
-            ids: Optional list of IDs for the documents
+            documents: List of document dictionaries with 'content' and 'metadata' keys.
+            ids: Optional list of IDs for the documents.
         """
         try:
             texts = [doc['content'] for doc in documents]
             metadatas = [doc.get('metadata', {}) for doc in documents]
             
-            logger.info(f"Adding {len(documents)} documents to collection")
+            logger.info(f"Adding {len(documents)} documents to collection {self._collection_name}")
             self._vectorstore.add_texts(
                 texts=texts,
                 metadatas=metadatas,
@@ -61,7 +59,7 @@ class DocumentStore:
             raise
 
     def delete_collection(self) -> None:
-        """Delete the current collection."""
+        """Delete the current collection entirely."""
         try:
             logger.info(f"Deleting collection {self._collection_name}")
             self._vectorstore.delete_collection()
@@ -74,7 +72,10 @@ class DocumentStore:
         Get the vector store retriever.
         
         Args:
-            search_kwargs: Optional search parameters for the retriever
+            search_kwargs: Optional search parameters for the retriever.
+        
+        Returns:
+            A VectorStore retriever configured with the desired search parameters.
         """
         return self._vectorstore.as_retriever(
             search_kwargs=search_kwargs or {"k": 4}
