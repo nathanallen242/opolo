@@ -13,7 +13,7 @@ from app.core.llm import LLM
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class DocumentQA:
+class Opolo:
     """CLI application for document question answering."""
     
     def __init__(self, data_dir: str = "./data"):
@@ -95,7 +95,7 @@ async def main():
     """Main entry point."""
     load_dotenv()
 
-    app = DocumentQA()
+    app = Opolo()
     print("Initializing system...")
     await app.initialize()
     await app.run_cli()
