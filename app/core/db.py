@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional, Dict
 
 from langchain_ollama import OllamaEmbeddings
-from langchain.schema.vectorstore import VectorStore
+from langchain.schema.vectorstore import VectorStore, VectorStoreRetriever
 from langchain_chroma import Chroma
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ class DocumentStore:
         self,
         persist_directory: str = "./chroma_db",
         collection_name: str = "ethics_docs",
-        model: str = "llama2"
+        model: str = "llama3.2"
     ):
         """
         Initialize ChromaDB client and collection with Ollama embeddings (Llama 2).
@@ -67,7 +67,7 @@ class DocumentStore:
             logger.error(f"Error deleting collection: {e}")
             raise
 
-    def get_retriever(self, search_kwargs: Optional[Dict] = None) -> VectorStore:
+    def get_retriever(self, search_kwargs: Optional[Dict] = None) -> VectorStoreRetriever:
         """
         Get the vector store retriever.
         

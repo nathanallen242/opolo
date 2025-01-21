@@ -5,7 +5,7 @@ from langchain_ollama.chat_models import ChatOllama
 from langchain.output_parsers import CommaSeparatedListOutputParser
 from langchain.prompts import PromptTemplate
 from langchain.retrievers import MultiQueryRetriever
-from langchain.schema.vectorstore import VectorStore
+from langchain.schema.vectorstore import VectorStoreRetriever
 from langchain.chains import RetrievalQA
 from langchain.schema.runnable import RunnableSequence
 
@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 class LLM:
     """Handles LLM operations with MultiQueryRetrieval capability."""
     
-    def __init__(self, model_name: str = "llama2"):
+    def __init__(self, model_name: str = "llama3.2"):
         """
         Initialize LLM with the specified model.
         
         Args:
             model_name: Name of the Llama model to use.
         """
-        self._llm = ChatOllama(model_name=model_name)
+        self._llm = ChatOllama(model=model_name)
         self._query_prompt = PromptTemplate(
             input_variables=["question"],
             template="""You are an AI language model tasked with generating multiple search queries 
@@ -61,7 +61,7 @@ class LLM:
         raw_text = await self._query_pipeline.ainvoke({"question": question})
         return self._output_parser.parse(raw_text)
 
-    async def askQuestion(self, question: str, retriever: VectorStore) -> str:
+    async def askQuestion(self, question: str, retriever: VectorStoreRetriever) -> str:
         """
         Ask a question using MultiQueryRetriever and produce a final answer.
         
@@ -73,11 +73,12 @@ class LLM:
             The final answer string.
         """
         try:
-            mq_retriever = MultiQueryRetriever(
+            mq_retriever = MultiQueryRetriever.from_llm(
                 llm=self._llm,
-                retriever=retriever.as_retriever(),
+                retriever=retriever,
                 prompt=self._query_prompt
             )
+
             retrieval_chain = RetrievalQA.from_chain_type(
                 llm=self._llm,
                 chain_type="stuff",
