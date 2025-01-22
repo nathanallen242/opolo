@@ -1,5 +1,6 @@
 """Database operations for document storage and retrieval."""
 import logging
+from pathlib import Path
 from typing import List, Optional, Dict
 
 from langchain_ollama import OllamaEmbeddings
@@ -14,27 +15,38 @@ class DocumentStore:
     def __init__(
         self,
         persist_directory: str = "./chroma_db",
-        collection_name: str = "ethics_docs",
-        model: str = "llama3.2"
+        collection_name: str = "docs",
+        model: str = "llama3.2",
+        load_from_disk: bool = True
     ):
         """
-        Initialize ChromaDB client and collection with Ollama embeddings (Llama 2).
+        Initialize ChromaDB client - either load existing DB or create new.
         
         Args:
-            persist_directory: Directory to persist the database.
-            collection_name: Name of the collection to store documents.
-            model: Ollama Embeddings model to use (default is "llama2").
+            persist_directory: Directory to persist/load the database
+            collection_name: Name of the collection
+            model: Ollama Embeddings model to use
+            load_from_disk: If True and DB exists, load it; otherwise create new
         """
         self._embedding_function = OllamaEmbeddings(model=model)
         self._collection_name = collection_name
         self._persist_directory = persist_directory
+        db_exists = Path(persist_directory).exists()
         
-        # Chroma vector store using Ollama embeddings
-        self._vectorstore = Chroma(
-            collection_name=collection_name,
-            embedding_function=self._embedding_function,
-            persist_directory=persist_directory
+        if db_exists and load_from_disk:
+            logger.info(f"Loading existing Chroma DB from {persist_directory}")
+            self._vectorstore = Chroma(
+                persist_directory=persist_directory,
+                embedding_function=self._embedding_function,
+                collection_name=collection_name
         )
+        else:
+            logger.info("Initializing new Chroma DB")
+            self._vectorstore = Chroma(
+                collection_name=collection_name,
+                embedding_function=self._embedding_function,
+                persist_directory=persist_directory
+    )
     
     def add_documents(self, documents: List[dict], ids: Optional[List[str]] = None) -> None:
         """

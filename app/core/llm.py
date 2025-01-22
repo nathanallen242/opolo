@@ -1,95 +1,88 @@
-"""LLM operations for question answering and retrieval."""
+"""LLM operations for question answering using RAG."""
 import logging
-from typing import List
 from langchain_ollama.chat_models import ChatOllama
-from langchain.output_parsers import CommaSeparatedListOutputParser
-from langchain.prompts import PromptTemplate
+from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.retrievers import MultiQueryRetriever
+from langchain.schema.runnable import RunnablePassthrough
+from langchain.schema.output_parser import StrOutputParser
 from langchain.schema.vectorstore import VectorStoreRetriever
-from langchain.chains import RetrievalQA
-from langchain.schema.runnable import RunnableSequence
 
 logger = logging.getLogger(__name__)
 
 class LLM:
-    """Handles LLM operations with MultiQueryRetrieval capability."""
+    """Handles LLM operations with streamlined RAG pipeline."""
+    
+    QUERY_PROMPT = PromptTemplate(
+        input_variables=["question"],
+        template="""You are an AI language model assistant. Your task is to generate 2
+        different versions of the given user question to retrieve relevant documents from
+        a vector database. By generating multiple perspectives on the user question, your
+        goal is to help the user overcome some of the limitations of the distance-based
+        similarity search. Provide these alternative questions separated by newlines.
+        Original question: {question}"""
+    )
+    
+    RAG_TEMPLATE = """Answer the question based ONLY on the following context:
+    {context}
+    Question: {question}
+    
+    If the context doesn't contain enough information to answer the question fully, 
+    say "I don't have enough information to answer that completely" and then provide 
+    whatever partial information you can from the context."""
     
     def __init__(self, model_name: str = "llama3.2"):
         """
         Initialize LLM with the specified model.
         
         Args:
-            model_name: Name of the Llama model to use.
+            model_name: Name of the Llama model to use
         """
-        self._llm = ChatOllama(model=model_name)
-        self._query_prompt = PromptTemplate(
-            input_variables=["question"],
-            template="""You are an AI language model tasked with generating multiple search queries 
-            for finding relevant information to answer a question. Generate multiple different ways to ask 
-            the following question that will help get relevant information from a vector database.
-            Make the queries diverse to capture different aspects of the question.
-
-            Original question: {question}
-
-            Generate different versions of the question, separated by commas:
-            """
-        )
-        self._output_parser = CommaSeparatedListOutputParser()
-        self._query_pipeline = self._query_prompt | self._llm
-        self._answer_prompt = PromptTemplate(
-            input_variables=["context", "question"],
-            template="""Use the following pieces of context to answer the question.
-            If you cannot answer based on the context, say "I don't have enough information to answer that."
-
-            Context: {context}
-
-            Question: {question}
-
-            Answer:"""
-        )
-
-    async def _generate_queries(self, question: str) -> List[str]:
+        self._llm = ChatOllama(model=model_name, temperature=0.1)
+        self._rag_prompt = ChatPromptTemplate.from_template(self.RAG_TEMPLATE)
+    
+    def _build_rag_chain(self, retriever: VectorStoreRetriever):
         """
-        Generate multiple versions of the input question.
+        Build the RAG chain combining retrieval and response generation.
         
         Args:
-            question: Original question
-        
+            retriever: Vector store retriever to use
+            
         Returns:
-            List of generated questions.
+            Complete RAG chain
         """
-        raw_text = await self._query_pipeline.ainvoke({"question": question})
-        return self._output_parser.parse(raw_text)
-
+        mq_retriever = MultiQueryRetriever.from_llm(
+            retriever=retriever,
+            llm=self._llm,
+            prompt=self.QUERY_PROMPT
+        )
+        
+        return (
+            {"context": mq_retriever, "question": RunnablePassthrough()}
+            | self._rag_prompt
+            | self._llm
+            | StrOutputParser()
+        )
+    
     async def askQuestion(self, question: str, retriever: VectorStoreRetriever) -> str:
         """
-        Ask a question using MultiQueryRetriever and produce a final answer.
+        Process a question using the RAG pipeline.
         
         Args:
             question: The question to answer
-            retriever: Vector store to use for document lookup
-        
+            retriever: Vector store retriever
+            
         Returns:
-            The final answer string.
+            Generated answer string
         """
         try:
-            mq_retriever = MultiQueryRetriever.from_llm(
-                llm=self._llm,
-                retriever=retriever,
-                prompt=self._query_prompt
-            )
-
-            retrieval_chain = RetrievalQA.from_chain_type(
-                llm=self._llm,
-                chain_type="stuff",
-                retriever=mq_retriever,
-                chain_type_kwargs={
-                    "prompt": self._answer_prompt
-                }
-            )
-
-            response = await retrieval_chain.ainvoke({"query": question})
-            return response["result"]
+            logger.info("Building RAG chain")
+            chain = self._build_rag_chain(retriever)
+            
+            logger.info("Generating response")
+            response = await chain.ainvoke(question)
+            
+            logger.info("Response generated successfully")
+            return response
             
         except Exception as e:
             logger.error(f"Error processing question: {e}")
