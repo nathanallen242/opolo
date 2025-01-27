@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 
 from langchain_ollama import OllamaEmbeddings
-from langchain.schema.vectorstore import VectorStore, VectorStoreRetriever
+from langchain.schema.vectorstore import VectorStoreRetriever
 from langchain_chroma import Chroma
 
 logger = logging.getLogger(__name__)
@@ -90,5 +90,5 @@ class DocumentStore:
             A VectorStore retriever configured with the desired search parameters.
         """
         return self._vectorstore.as_retriever(
-            search_kwargs=search_kwargs or {"k": 4}
+            search_kwargs=search_kwargs or {"k": 3}
         )

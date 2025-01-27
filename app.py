@@ -1,9 +1,9 @@
-"""Streamlit interface for document question-answering system."""
 import streamlit as st
 import asyncio
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
+from langchain_community.chat_message_histories import ChatMessageHistory
 
 from app.core.document import DocumentProcessor
 from app.core.db import DocumentStore
@@ -74,6 +74,34 @@ st.markdown("""
             flex-grow: 1;
         }
 
+        /* Welcome section styling */
+        .welcome-container {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 2rem;
+        }
+
+        .sample-questions {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .question-box {
+            background: #2E303D;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            flex: 1;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+
+        .question-box:hover {
+            background: #3E4049;
+        }
+
         /* Form styling */
         [data-testid="stForm"] {
             background: #1E1E1E;
@@ -87,15 +115,19 @@ st.markdown("""
             max-width: 800px;
         }
 
-        .stButton button {
-            background: #1F61D5;
+        .send-icon {
             color: white;
+            cursor: pointer;
+            padding: 8px;
             border-radius: 8px;
+            background: #1F61D5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             height: 40px;
-            width: 100%;
         }
 
-        .stButton button:hover {
+        .send-icon:hover {
             background: #1850B5;
         }
 
@@ -113,6 +145,14 @@ st.markdown("""
             border-color: #4A4B53;
             border-radius: 8px;
         }
+
+        /* PDF viewer styling */
+        .pdf-viewer {
+            height: calc(100vh - 100px);
+            width: 100%;
+            border: none;
+            border-radius: 8px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -128,6 +168,9 @@ class StreamlitApp:
         if "messages" not in st.session_state:
             st.session_state.messages = []
         
+        if "first_query" not in st.session_state:
+            st.session_state.first_query = True
+
         if "doc_store_initialized" not in st.session_state:
             st.session_state.doc_store_initialized = False
 
@@ -136,22 +179,32 @@ class StreamlitApp:
                 st.markdown('<div style="margin-top: 80px;">', unsafe_allow_html=True)
 
                 if not st.session_state.doc_store_initialized:
-                    st.info("Initializing document database...")
-                    Path(self.persist_dir).mkdir(parents=True, exist_ok=True)
+                    persist_path = Path(self.persist_dir)
+                    db_exists = persist_path.exists() and any(persist_path.iterdir())
                     
-                    st.session_state.doc_store = DocumentStore(
-                        persist_directory=str(self.persist_dir),
-                        load_from_disk=False 
-                    )
+                    if db_exists:
+                        st.info("Loading existing document database...")
+                        st.session_state.doc_store = DocumentStore(
+                            persist_directory=str(self.persist_dir),
+                            load_from_disk=True
+                        )
+                        st.success("Successfully loaded existing document database")
+                    else:
+                        st.info("Initializing new document database...")
+                        persist_path.mkdir(parents=True, exist_ok=True)
+                        
+                        st.session_state.doc_store = DocumentStore(
+                            persist_directory=str(self.persist_dir),
+                            load_from_disk=False
+                        )
+                        
+                        self.doc_store = st.session_state.doc_store
+                        self._process_documents()
+                        st.success("Successfully initialized and processed new document database")
                     
-                    self.doc_store = st.session_state.doc_store
-                    self._process_documents()
                     st.session_state.doc_store_initialized = True
-                    st.success("Successfully initialized and processed the document database")
-                else:
-                    st.info("Loading existing document database from session state...")
-                    self.doc_store = st.session_state.doc_store
-                    st.success("Successfully loaded existing document database")
+                
+                self.doc_store = st.session_state.doc_store
                 
                 st.markdown('</div>', unsafe_allow_html=True)
         
@@ -163,10 +216,7 @@ class StreamlitApp:
             raise
 
     def _process_documents(self) -> None:
-        """
-        Process PDF documents and add them to the vector store.
-        Called only once during the first initialization.
-        """
+        """Process PDF documents and add them to the vector store."""
         try:
             pdf_files = list(self.data_dir.glob("*.pdf"))
             if not pdf_files:
@@ -209,13 +259,7 @@ class StreamlitApp:
             raise
     
     def display_chat_message(self, message: str, is_user: bool = False) -> None:
-        """
-        Display a chat message in the UI.
-        
-        Args:
-            message: Content of the message to display
-            is_user: True if message is from user, False if from assistant
-        """
+        """Display a chat message in the UI."""
         avatar = "👤" if is_user else "🤖"
         class_name = "user" if is_user else "assistant"
         
@@ -226,30 +270,129 @@ class StreamlitApp:
             </div>
         """, unsafe_allow_html=True)
     
+    def display_welcome(self) -> None:
+        """Display the welcome message and sample questions."""
+        # Apply custom CSS for styling
+        st.markdown("""
+            <style>
+                .welcome-container {
+                    text-align: center;
+                    padding: 50px;
+                }
+                .welcome-container h1 {
+                    font-size: 3em;
+                    margin-bottom: 20px;
+                }
+                .welcome-container p {
+                    font-size: 1.5em;
+                    margin-bottom: 40px;
+                }
+                .sample-questions {
+                    display: flex;
+                    justify-content: center;
+                    gap: 20px;
+                }
+                .question-button {
+                    background-color: #f0f2f6;
+                    border: 2px solid #007BFF;
+                    border-radius: 10px;
+                    padding: 20px;
+                    width: 250px;
+                    height: 100px;
+                    font-size: 1.2em;
+                    cursor: pointer;
+                    transition: background-color 0.3s, transform 0.3s;
+                }
+                .question-button:hover {
+                    background-color: #e0e5ec;
+                    transform: scale(1.05);
+                }
+                /* Hide the default Streamlit button styles */
+                .stButton > button {
+                    all: unset;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # Welcome message
+        st.markdown("""
+            <div class="welcome-container">
+                <h1>👋 Welcome to Opolo!</h1>
+                <p>Get started by asking a question about your documents</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Sample questions
+        sample_questions = [
+            {
+                "label": "What are the main topics covered?",
+                "question": "What are the main topics covered in the documents?"
+            },
+            {
+                "label": "Summarize key findings",
+                "question": "Can you summarize the key findings?"
+            },
+            {
+                "label": "What are the conclusions?",
+                "question": "What are the main conclusions?"
+            },
+        ]
+
+        # Display sample questions as styled buttons
+        cols = st.columns(len(sample_questions))
+        for col, sample in zip(cols, sample_questions):
+            with col:
+                # Use a container to apply custom styles to the button
+                if st.button(sample["label"], key=sample["label"]):
+                    asyncio.run(self.query_async(sample["question"]))
+
     async def process_query(self, query: str) -> None:
-        """
-        Process a user query and update chat history.
-        
-        Args:
-            query: User's question to process
-        """
+        """Process a user query and update chat history."""
         try:
+            st.session_state.messages.append({"role": "user", "content": query})
+            st.session_state.first_query = False
+            
+            chat_history = ChatMessageHistory()
+            for msg in st.session_state.messages[:-1]: 
+                if msg["role"] == "user":
+                    chat_history.add_user_message(msg["content"])
+                else:
+                    chat_history.add_ai_message(msg["content"])
+
             with st.spinner("Thinking..."):
                 answer = await self.llm.askQuestion(
                     query,
-                    self.doc_store.get_retriever()
+                    self.doc_store.get_retriever(),
+                    chat_history
                 )
             
-            st.session_state.messages.append({"role": "user", "content": query})
             st.session_state.messages.append({"role": "assistant", "content": answer})
             
         except Exception as e:
             logger.error(f"Error processing question: {e}")
+            st.session_state.messages.pop()
             st.error("An error occurred while processing your question. Please try again.")
 
     def render(self) -> None:
+        """Render the main application interface."""
         st.markdown('<div class="header"><h1>🧠 opolo</h1></div>', unsafe_allow_html=True)
+
+        with st.sidebar:
+            st.markdown("### 📄 PDF Viewer")
+            pdf_files = list(self.data_dir.glob("*.pdf"))
+            if pdf_files:
+                selected_pdf = st.selectbox(
+                    "Select a document to view",
+                    options=pdf_files,
+                    format_func=lambda x: x.name
+                )
+                if selected_pdf:
+                    st.markdown(f'<iframe class="pdf-viewer" src="data/{selected_pdf.name}"></iframe>', unsafe_allow_html=True)
+
         st.markdown('<div class="main-content">', unsafe_allow_html=True)
+
+        if st.session_state.first_query:
+            self.display_welcome()
 
         for message in st.session_state.messages:
             self.display_chat_message(
@@ -266,7 +409,11 @@ class StreamlitApp:
                     placeholder="Type your question here..."
                 )
             with cols[1]:
-                submit = st.form_submit_button("Send", use_container_width=True)
+                submit = st.form_submit_button(
+                    "📤",
+                    help="Send message",
+                    use_container_width=True
+                )
             
             if submit and query:
                 asyncio.run(self.process_query(query))

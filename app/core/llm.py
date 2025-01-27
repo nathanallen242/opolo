@@ -3,7 +3,8 @@ import logging
 from langchain_ollama.chat_models import ChatOllama
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.retrievers import MultiQueryRetriever
-from langchain.schema.runnable import RunnablePassthrough
+from langchain.schema import BaseChatMessageHistory
+from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
 from langchain.schema.output_parser import StrOutputParser
 from langchain.schema.vectorstore import VectorStoreRetriever
 
@@ -22,13 +23,15 @@ class LLM:
         Original question: {question}"""
     )
     
-    RAG_TEMPLATE = """Answer the question based ONLY on the following context:
+    RAG_TEMPLATE = """Here is the conversation so far:
+    {history}
+
+    Use ONLY the following context to answer:
     {context}
     Question: {question}
-    
-    If the context doesn't contain enough information to answer the question fully, 
-    say "I don't have enough information to answer that completely" and then provide 
-    whatever partial information you can from the context."""
+
+    If the context doesn't contain enough information to answer fully, say so.
+    """
     
     def __init__(self, model_name: str = "llama3.2"):
         """
@@ -40,7 +43,26 @@ class LLM:
         self._llm = ChatOllama(model=model_name, temperature=0.1)
         self._rag_prompt = ChatPromptTemplate.from_template(self.RAG_TEMPLATE)
     
-    def _build_rag_chain(self, retriever: VectorStoreRetriever):
+    @staticmethod
+    def format_history(h: BaseChatMessageHistory) -> str:
+        """
+        Helper method which formats the provided message history to be inputted as additional
+        context to the RAG pipeline.
+
+        Args:
+            h: Abstract base class for storing chat message history.
+        """
+        lines = []
+        for m in h.messages:
+            if m.type == "human":
+                lines.append(f"User: {m.content}")
+            elif m.type == "ai":
+                lines.append(f"Assistant: {m.content}")
+            else:
+                lines.append(f"{m.type.capitalize()}: {m.content}")
+        return "\n".join(lines)
+
+    def _build_rag_chain(self, retriever: VectorStoreRetriever, history: BaseChatMessageHistory):
         """
         Build the RAG chain combining retrieval and response generation.
         
@@ -55,35 +77,38 @@ class LLM:
             llm=self._llm,
             prompt=self.QUERY_PROMPT
         )
-        
+        conversation_prompt = ChatPromptTemplate.from_template(self.RAG_TEMPLATE)
+
         return (
-            {"context": mq_retriever, "question": RunnablePassthrough()}
-            | self._rag_prompt
+            {
+                "history": RunnableLambda(lambda _: self.format_history(history)),
+                "context": mq_retriever,
+                "question": RunnablePassthrough(),
+            }
+            | conversation_prompt
             | self._llm
             | StrOutputParser()
         )
     
-    async def askQuestion(self, question: str, retriever: VectorStoreRetriever) -> str:
+    async def askQuestion(self, question: str, retriever: VectorStoreRetriever, history: BaseChatMessageHistory) -> str:
         """
         Process a question using the RAG pipeline.
         
         Args:
             question: The question to answer
             retriever: Vector store retriever
+            history: Additional context of message history
             
         Returns:
             Generated answer string
         """
         try:
-            logger.info("Building RAG chain")
-            chain = self._build_rag_chain(retriever)
-            
+            logger.info("Building RAG chain with conversation history")
+            chain = self._build_rag_chain(retriever, history)
             logger.info("Generating response")
             response = await chain.ainvoke(question)
-            
             logger.info("Response generated successfully")
             return response
-            
         except Exception as e:
             logger.error(f"Error processing question: {e}")
             raise
