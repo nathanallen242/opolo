@@ -2,11 +2,13 @@
 import logging
 from langchain_ollama.chat_models import ChatOllama
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
+from langchain_core.runnables import RunnableParallel
 from langchain.retrievers import MultiQueryRetriever
 from langchain.schema import BaseChatMessageHistory
 from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
 from langchain.schema.output_parser import StrOutputParser
 from langchain.schema.vectorstore import VectorStoreRetriever
+from .reranker import Reranker
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +80,17 @@ class LLM:
             prompt=self.QUERY_PROMPT
         )
         conversation_prompt = ChatPromptTemplate.from_template(self.RAG_TEMPLATE)
-
+        reranker = Reranker()
+        
+        def rerank_docs(data):
+            query = data["query"]
+            docs = data["docs"]
+            return reranker.rerank(query, docs)
+        
         return (
             {
                 "history": RunnableLambda(lambda _: self.format_history(history)),
-                "context": mq_retriever,
+                "context": RunnableParallel({"query": RunnablePassthrough(), "docs": mq_retriever}) | RunnableLambda(rerank_docs),
                 "question": RunnablePassthrough(),
             }
             | conversation_prompt

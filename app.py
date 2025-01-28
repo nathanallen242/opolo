@@ -272,7 +272,6 @@ class StreamlitApp:
     
     def display_welcome(self) -> None:
         """Display the welcome message and sample questions."""
-        # Apply custom CSS for styling
         st.markdown("""
             <style>
                 .welcome-container {
@@ -314,7 +313,6 @@ class StreamlitApp:
             </style>
         """, unsafe_allow_html=True)
 
-        # Welcome message
         st.markdown("""
             <div class="welcome-container">
                 <h1>👋 Welcome to Opolo!</h1>
@@ -322,7 +320,6 @@ class StreamlitApp:
             </div>
         """, unsafe_allow_html=True)
 
-        # Sample questions
         sample_questions = [
             {
                 "label": "What are the main topics covered?",
@@ -342,7 +339,6 @@ class StreamlitApp:
         cols = st.columns(len(sample_questions))
         for col, sample in zip(cols, sample_questions):
             with col:
-                # Use a container to apply custom styles to the button
                 if st.button(sample["label"], key=sample["label"]):
                     asyncio.run(self.process_query(sample["question"]))
 
