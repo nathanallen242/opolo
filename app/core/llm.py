@@ -1,5 +1,6 @@
 """LLM operations for question answering using RAG."""
 import logging
+from typing import AsyncIterable
 from langchain_ollama.chat_models import ChatOllama
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain_core.runnables import RunnableParallel
@@ -98,7 +99,7 @@ class LLM:
             | StrOutputParser()
         )
     
-    async def askQuestion(self, question: str, retriever: VectorStoreRetriever, history: BaseChatMessageHistory) -> str:
+    async def askQuestion(self, question: str, retriever: VectorStoreRetriever, history: BaseChatMessageHistory) -> AsyncIterable[str]:
         """
         Process a question using the RAG pipeline.
         
@@ -108,15 +109,15 @@ class LLM:
             history: Additional context of message history
             
         Returns:
-            Generated answer string
+            Generated answer string chunks
         """
         try:
             logger.info("Building RAG chain with conversation history")
             chain = self._build_rag_chain(retriever, history)
-            logger.info("Generating response")
-            response = await chain.ainvoke(question)
-            logger.info("Response generated successfully")
-            return response
+            logger.info("Streaming response...")
+            async for chunk in chain.astream(question):
+                yield chunk
+            logger.info("Stream completed")
         except Exception as e:
             logger.error(f"Error processing question: {e}")
-            raise
+            yield "An error occurred while generating the response."

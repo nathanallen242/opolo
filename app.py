@@ -355,19 +355,33 @@ class StreamlitApp:
                 else:
                     chat_history.add_ai_message(msg["content"])
 
-            with st.spinner("Thinking..."):
-                answer = await self.llm.askQuestion(
-                    query,
-                    self.doc_store.get_retriever(),
-                    chat_history
-                )
+            # with st.spinner("Thinking..."):
+            #     answer = await self.llm.askQuestion(
+            #         query,
+            #         self.doc_store.get_retriever(),
+            #         chat_history
+            #     )
             
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+            # st.session_state.messages.append({"role": "assistant", "content": answer})
+            st.session_state.messages.append({"role": "assistant", "content": ""})
+            message_placeholder = st.empty()
+            full_response = ""
+
+            # Stream response chunks
+            async for chunk in self.llm.askQuestion(
+                query,
+                self.doc_store.get_retriever(),
+                chat_history
+            ):
+                full_response += chunk
+                st.session_state.messages[-1]["content"] = full_response
+                message_placeholder.markdown(full_response)
             
         except Exception as e:
             logger.error(f"Error processing question: {e}")
-            st.session_state.messages.pop()
-            st.error("An error occurred while processing your question. Please try again.")
+            error_msg = "An error occurred. Please try again."
+            st.session_state.messages[-1]["content"] = error_msg
+            message_placeholder.markdown(error_msg)
 
     def render(self) -> None:
         """Render the main application interface."""
