@@ -344,7 +344,7 @@ class StreamlitApp:
             with col:
                 # Use a container to apply custom styles to the button
                 if st.button(sample["label"], key=sample["label"]):
-                    asyncio.run(self.query_async(sample["question"]))
+                    asyncio.run(self.process_query(sample["question"]))
 
     async def process_query(self, query: str) -> None:
         """Process a user query and update chat history."""

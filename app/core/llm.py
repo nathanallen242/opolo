@@ -33,14 +33,14 @@ class LLM:
     If the context doesn't contain enough information to answer fully, say so.
     """
     
-    def __init__(self, model_name: str = "llama3.2"):
+    def __init__(self, model_name: str = "llama3.1:8b"):
         """
         Initialize LLM with the specified model.
         
         Args:
             model_name: Name of the Llama model to use
         """
-        self._llm = ChatOllama(model=model_name, temperature=0.1)
+        self._llm = ChatOllama(model=model_name, temperature=0.3)
         self._rag_prompt = ChatPromptTemplate.from_template(self.RAG_TEMPLATE)
     
     @staticmethod

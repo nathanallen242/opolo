@@ -16,7 +16,7 @@ class DocumentStore:
         self,
         persist_directory: str = "./chroma_db",
         collection_name: str = "docs",
-        model: str = "llama3.2",
+        model: str = "llama3.1:8b",
         load_from_disk: bool = True
     ):
         """
